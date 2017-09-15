@@ -50,10 +50,15 @@ todoItem ::
   Dynamic t TodoItem ->
   m (Dynamic t Bool)
 todoItem eClearComplete eMarkAllComplete dItem = mdo
-  (dComplete, dEditing) <- elDynClass "li" (todoItemAttrs dComplete dEditing) $ do
-    (dComplete, eEdit) <- todoItemView eClearComplete eMarkAllComplete dItem
-    eView <- todoItemEdit (view tiName <$> dItem)
+  (dComplete, dEditing) <- elDynClass "li" (todoItemAttrs dComplete dEditing) $ mdo
+    item <- sample . current $ dItem
+    (dComplete, eEdit) <- todoItemView eClearComplete eMarkAllComplete (view tiComplete item) dText
+    (eChangeText, eView) <- todoItemEdit (view tiName <$> dItem)
+
+    dText <- holdDyn (view tiName item) eChangeText
+
     dEditing <- holdDyn False . leftmost $ [True <$ eEdit, False <$ eView]
+
     pure (dComplete, dEditing)
   pure dComplete
 
@@ -67,12 +72,13 @@ todoItemView ::
   ) =>
   Event t () ->
   Event t Bool ->
-  Dynamic t TodoItem ->
+  Bool ->
+  Dynamic t Text ->
   m (Dynamic t Bool, Event t ())
-todoItemView eClearComplete eMarkAllComplete dItem =
+todoItemView eClearComplete eMarkAllComplete iComplete dText =
   divClass "view" $ do
-    dComplete <- complete eClearComplete eMarkAllComplete (view tiComplete <$> dItem)
-    eEdit <- itemName (view tiName <$> dItem)
+    dComplete <- complete eClearComplete eMarkAllComplete iComplete
+    eEdit <- itemName dText
     remove
     pure (dComplete, eEdit)
 
@@ -85,21 +91,26 @@ todoItemEdit ::
   , MonadReader k m
   ) =>
   Dynamic t Text ->
-  m (Event t ())
+  m (Event t Text, Event t ())
 todoItemEdit dName = mdo
   ti <- textInput $
     def & textInputConfig_attributes .~ pure ("class" =: "edit")
         & textInputConfig_setValue .~ ("" <$ eEnter)
 
   let
-    bValue = current . fmap (Text.strip) $ ti ^. textInput_value
+    bValue = current . fmap Text.strip $ ti ^. textInput_value
     isKey k = (== k) . keyCodeLookup . fromIntegral
     eKey = ti ^. textInput_keypress
-    eEnter = ffilter (isKey Enter) eKey
-    eAtEnter = bValue <@ eEnter
-    eDone = ffilter (not . Text.null) eAtEnter
+    eEnter = void . ffilter (isKey Enter) $ eKey
+    eEscape = void . ffilter (isKey Escape) $ eKey
+    eConfirmValue = bValue <@ eEnter
+    eDone = ffilter (not . Text.null) eConfirmValue
+    eKill = ffilter Text.null eConfirmValue
+    eExit = leftmost [void eDone, eEscape]
 
-  pure $ void eDone
+  tellRemoval eKill
+
+  pure (eDone, eExit)
 
 complete ::
   ( MonadWidget t m
@@ -111,11 +122,10 @@ complete ::
   ) =>
   Event t () ->
   Event t Bool ->
-  Dynamic t Bool ->
+  Bool ->
   m (Dynamic t Bool)
-complete eClearComplete eMarkAllComplete dCompleteIn = do
-  initial <- sample . current $ dCompleteIn
-  cb <- checkbox initial $
+complete eClearComplete eMarkAllComplete iComplete = do
+  cb <- checkbox iComplete $
     def & checkboxConfig_attributes .~ pure ("class" =: "toggle")
         & checkboxConfig_setValue .~ eMarkAllComplete
 
