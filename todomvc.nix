@@ -1,6 +1,6 @@
 { mkDerivation, base, containers, directory, filepath, ghcjs-dom
-, jsaddle, jsaddle-warp, lens, reflex-dom-core, stdenv, text, wai
-, wai-middleware-static, warp, websockets
+, jsaddle, jsaddle-warp, lens, mtl, reflex, reflex-dom-core, stdenv
+, text, wai, wai-middleware-static, warp, websockets
 }:
 mkDerivation {
   pname = "todomvc";
@@ -10,7 +10,8 @@ mkDerivation {
   isExecutable = true;
   libraryHaskellDepends = [
     base containers directory filepath ghcjs-dom jsaddle jsaddle-warp
-    lens reflex-dom-core text wai wai-middleware-static warp websockets
+    lens mtl reflex reflex-dom-core text wai wai-middleware-static warp
+    websockets
   ];
   license = stdenv.lib.licenses.bsd3;
 }
